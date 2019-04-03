@@ -15,10 +15,17 @@
 
 package software.amazon.awssdk.core.client.handler;
 
+import static software.amazon.awssdk.http.SdkHttpMethod.DELETE;
+import static software.amazon.awssdk.http.SdkHttpMethod.GET;
+import static software.amazon.awssdk.http.SdkHttpMethod.HEAD;
+
 import java.net.URI;
+import java.util.Arrays;
+import java.util.List;
 import software.amazon.awssdk.annotations.SdkProtectedApi;
 import software.amazon.awssdk.core.SdkRequest;
 import software.amazon.awssdk.core.SdkResponse;
+import software.amazon.awssdk.core.SdkStandardLogger;
 import software.amazon.awssdk.core.client.config.SdkAdvancedClientOption;
 import software.amazon.awssdk.core.client.config.SdkClientConfiguration;
 import software.amazon.awssdk.core.client.config.SdkClientOption;
@@ -29,10 +36,14 @@ import software.amazon.awssdk.core.interceptor.ExecutionInterceptorChain;
 import software.amazon.awssdk.core.interceptor.InterceptorContext;
 import software.amazon.awssdk.core.interceptor.SdkExecutionAttribute;
 import software.amazon.awssdk.http.SdkHttpFullRequest;
+import software.amazon.awssdk.http.SdkHttpMethod;
 import software.amazon.awssdk.utils.StringUtils;
 
 @SdkProtectedApi
 public abstract class BaseClientHandler {
+
+    private static final List<SdkHttpMethod> NO_BODY_METHODS = Arrays.asList(GET, DELETE, HEAD);
+
     private SdkClientConfiguration clientConfiguration;
 
     protected BaseClientHandler(SdkClientConfiguration clientConfiguration) {
@@ -64,6 +75,7 @@ public abstract class BaseClientHandler {
         request = modifyEndpointHostIfNeeded(request, clientConfiguration, executionParams);
 
         addHttpRequest(executionContext, request);
+        warnOnUnsupportedRequests(request);
         runAfterMarshallingInterceptors(executionContext);
         return runModifyHttpRequestAndHttpContentInterceptors(executionContext);
     }
@@ -106,6 +118,13 @@ public abstract class BaseClientHandler {
         return originalRequest.toBuilder()
                               .host(executionParams.hostPrefixExpression() + originalRequest.host())
                               .build();
+    }
+
+    private static void warnOnUnsupportedRequests(SdkHttpFullRequest request) {
+        if (NO_BODY_METHODS.contains(request.method()) && request.contentStreamProvider().isPresent()) {
+            SdkStandardLogger.REQUEST_LOGGER.warn(() -> NO_BODY_METHODS +
+                                                        " requests with bodies are not supported by the default SDK clients.");
+        }
     }
 
     private static void addHttpRequest(ExecutionContext executionContext, SdkHttpFullRequest request) {
